@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using Benchmarks.Configuration;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Benchmarks.Metrics;
+using System.Diagnostics;
 
 namespace Benchmarks.Middleware
 {
@@ -16,20 +18,25 @@ namespace Benchmarks.Middleware
         private static readonly byte[] _helloWorldPayload = Encoding.UTF8.GetBytes("Hello, World!");
 
         private readonly RequestDelegate _next;
-        
-        public PlaintextMiddleware(RequestDelegate next)
+        private readonly IPlaintextMetrics _metrics;
+
+        public PlaintextMiddleware(RequestDelegate next, IPlaintextMetrics metrics)
         {
             _next = next;
+            _metrics = metrics;
         }
 
-        public Task Invoke(HttpContext httpContext)
+        public async Task Invoke(HttpContext httpContext)
         {
             if (httpContext.Request.Path.StartsWithSegments(_path, StringComparison.Ordinal))
             {
-                return WriteResponse(httpContext.Response);
+                var sw = Stopwatch.StartNew();
+                await WriteResponse(httpContext.Response);
+                _metrics.Add(DateTime.UtcNow, sw.Elapsed);
+                return;
             }
-
-            return _next(httpContext);
+            
+            await _next(httpContext);
         }
 
         public static Task WriteResponse(HttpResponse response)

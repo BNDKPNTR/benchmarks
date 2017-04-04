@@ -10,6 +10,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Internal;
 using Newtonsoft.Json;
+using System.Diagnostics;
+using Benchmarks.Metrics;
 
 namespace Benchmarks.Middleware
 {
@@ -21,24 +23,31 @@ namespace Benchmarks.Middleware
         private const int _bufferSize = 27;
 
         private readonly RequestDelegate _next;
+        private readonly IJsonMetrics _metrics;
 
-        public JsonMiddleware(RequestDelegate next)
+        public JsonMiddleware(RequestDelegate next, IJsonMetrics metrics)
         {
             _next = next;
+            _metrics = metrics;
         }
 
         public Task Invoke(HttpContext httpContext)
         {
             if (httpContext.Request.Path.StartsWithSegments(_path, StringComparison.Ordinal))
             {
+                var sw = Stopwatch.StartNew();
+
                 httpContext.Response.StatusCode = 200;
                 httpContext.Response.ContentType = "application/json";
                 httpContext.Response.ContentLength = _bufferSize;
 
-                using (var sw = new StreamWriter(httpContext.Response.Body, _encoding, bufferSize: _bufferSize))
+                using (var streamWriter = new StreamWriter(httpContext.Response.Body, _encoding, bufferSize: _bufferSize))
                 {
-                    _json.Serialize(sw, new { message = "Hello, World!" });
+                    _json.Serialize(streamWriter, new { message = "Hello, World!" });
                 }
+
+                sw.Stop();
+                _metrics.Add(sw.Elapsed, DateTime.UtcNow);
 
                 return TaskCache.CompletedTask;
             }

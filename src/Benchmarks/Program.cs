@@ -13,6 +13,9 @@ using Microsoft.AspNetCore.Server.Kestrel.Adapter;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Server.Kestrel.Internal;
+using Benchmarks.Metrics;
+using Microsoft.Extensions.Logging;
+using Benchmarks.Metrics.RequestLogger;
 
 namespace Benchmarks
 {
@@ -94,7 +97,10 @@ namespace Benchmarks
             var nonInteractiveValue = config["NonInteractive"];
             if (nonInteractiveValue == null || !bool.Parse(nonInteractiveValue))
             {
-                StartInteractiveConsoleThread();
+                var metrics = webHost.Services.GetService<IMetrics>();
+                var sysPerfLogger = webHost.Services.GetService<ISysPerfLogger>();
+                var requestLogger = (RequestLogger)webHost.Services.GetService<RequestLoggerProvider>().CreateLogger(string.Empty);
+                StartInteractiveConsoleThread(metrics, sysPerfLogger, requestLogger);
             }
 
             var kestrelThreadPoolDispatchingValue = config["KestrelThreadPoolDispatching"];
@@ -107,14 +113,14 @@ namespace Benchmarks
             webHost.Run();
         }
 
-        private static void StartInteractiveConsoleThread()
+        private static void StartInteractiveConsoleThread(IMetrics metrics, ISysPerfLogger sysPerfLogger, RequestLogger requestLogger)
         {
             // Run the interaction on a separate thread as we don't have Console.KeyAvailable on .NET Core so can't
             // do a pre-emptive check before we call Console.ReadKey (which blocks, hard)
 
             var started = new ManualResetEvent(false);
 
-            var interactiveThread = new Thread(() =>
+            var interactiveThread = new Thread(async () =>
             {
                 Console.WriteLine("Press 'C' to force GC or any other key to display GC stats");
                 Console.WriteLine();
@@ -129,6 +135,9 @@ namespace Benchmarks
                     {
                         Console.WriteLine();
                         Console.Write("Forcing GC...");
+                        metrics.Reset();
+                        sysPerfLogger.Reset();
+                        requestLogger.Reset();
                         GC.Collect();
                         GC.WaitForPendingFinalizers();
                         GC.Collect();
@@ -138,7 +147,14 @@ namespace Benchmarks
                     {
                         Console.WriteLine();
                         Console.WriteLine($"Allocated: {GetAllocatedMemory()}");
-                        Console.WriteLine($"Gen 0: {GC.CollectionCount(0)}, Gen 1: {GC.CollectionCount(1)}, Gen 2: {GC.CollectionCount(2)}");
+                        Console.WriteLine(metrics.GetFormattedMetrics());
+                        Console.WriteLine($"RequestLogger: {requestLogger.GetFormattedMetrics()}");
+                        Console.Write("Exporting to CSV...");
+                        await metrics.ExportToCSV(DateTime.UtcNow);
+                        Console.WriteLine(" done!");
+                        metrics.Reset();
+                        sysPerfLogger.Reset();
+                        requestLogger.Reset();
                     }
                 }
             });
