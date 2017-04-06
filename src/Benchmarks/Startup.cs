@@ -14,13 +14,9 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
-using Microsoft.Extensions.PlatformAbstractions;
-using Npgsql;
-using Benchmarks.Metrics;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using Benchmarks.Metrics.RequestLogger;
+using Microsoft.Extensions.Options;
+using Npgsql;
 
 namespace Benchmarks
 {
@@ -52,8 +48,6 @@ namespace Benchmarks
             // We re-register the Scenarios as an instance singleton here to avoid it being created again due to the
             // registration done in Program.Main
             services.AddSingleton(Scenarios);
-
-            services.AddMetrics(Scenarios);
 
             // Common DB services
             services.AddSingleton<IRandom, DefaultRandom>();
@@ -149,11 +143,20 @@ namespace Benchmarks
             return services.BuildServiceProvider(validateScopes: true);
         }
 
-        public void Configure(IApplicationBuilder app, ApplicationDbSeeder dbSeeder, ILoggerFactory loggerFactory)
+        public void Configure(IApplicationBuilder app, ApplicationDbSeeder dbSeeder, IOptions<AppSettings> appSettings,
+            ILoggerFactory loggerFactory)
         {
-            loggerFactory.AddProvider(app.ApplicationServices.GetService<RequestLoggerProvider>());
-            
-            if (Scenarios.Plaintext)
+            if (appSettings.Value.LogLevel.HasValue)
+            {
+                loggerFactory.AddConsole(appSettings.Value.LogLevel.Value);
+            }
+
+            if (Scenarios.StaticFiles)
+            {
+                app.UseStaticFiles();
+            }
+
+            if (Scenarios.StaticFiles || Scenarios.Plaintext)
             {
                 app.UsePlainText();
             }
@@ -243,11 +246,6 @@ namespace Benchmarks
             if (Scenarios.Any("Mvc"))
             {
                 app.UseMvc();
-            }
-
-            if (Scenarios.StaticFiles)
-            {
-                app.UseStaticFiles();
             }
 
             if (Scenarios.MemoryCachePlaintext)

@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Server.Kestrel;
 using Microsoft.AspNetCore.Server.Kestrel.Adapter;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.Server.HttpSys;
 using Microsoft.AspNetCore.Server.Kestrel.Internal;
 using Benchmarks.Metrics;
 using Microsoft.Extensions.Logging;
@@ -69,7 +70,8 @@ namespace Benchmarks
                     {
                         Listen(options, config, "http://localhost:5000/");
                     }
-
+                }).UseLibuv(options =>
+                {
                     var threads = GetThreadCount(config);
 
                     if (threads > 0)
@@ -194,8 +196,8 @@ namespace Benchmarks
 
         private static void Listen(KestrelServerOptions options, IConfigurationRoot config, string url)
         {
-            var uri = new Uri(url);
-            var endpoint =  CreateIPEndPoint(uri);
+            var urlPrefix = UrlPrefix.Create(url);
+            var endpoint =  CreateIPEndPoint(urlPrefix);
 
             options.Listen(endpoint, listenOptions =>
             {
@@ -205,27 +207,27 @@ namespace Benchmarks
                     listenOptions.ConnectionAdapters.Add(connectionFilter);
                 }
 
-                if (uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase))
+                if (urlPrefix.IsHttps)
                 {
                     listenOptions.UseHttps("testCert.pfx", "testPassword");
                 }
             });
         }
 
-        private static IPEndPoint CreateIPEndPoint(Uri uri)
+        private static IPEndPoint CreateIPEndPoint(UrlPrefix urlPrefix)
         {
             IPAddress ip;
 
-            if (string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(urlPrefix.Host, "localhost", StringComparison.OrdinalIgnoreCase))
             {
                 ip = IPAddress.Loopback;
             }
-            else if (!IPAddress.TryParse(uri.Host, out ip))
+            else if (!IPAddress.TryParse(urlPrefix.Host, out ip))
             {
                 ip = IPAddress.IPv6Any;
             }
 
-            return new IPEndPoint(ip, uri.Port);
+            return new IPEndPoint(ip, urlPrefix.PortValue);
         }
     }
 }

@@ -2,11 +2,9 @@
   <ItemGroup>
     <Scenarios Include="-n Plaintext -o KestrelHttpServer@dev --kestrelThreadCount 2" />
     <Scenarios Include="-n Plaintext -o KestrelHttpServer@dev --kestrelThreadCount 16 --kestrelThreadPoolDispatching false" />
-    <Scenarios Include="-n Plaintext -o KestrelHttpServer@feature/dev-si --kestrelThreadCount 2" />
-    <Scenarios Include="-n Plaintext -o KestrelHttpServer@feature/dev-si --kestrelThreadCount 32 --kestrelThreadPoolDispatching false" />
     <Scenarios Include="-n Json -o KestrelHttpServer@dev" />
-    <Scenarios Include="-n Json -o KestrelHttpServer@feature/dev-si" />
     <Scenarios Include="-n Plaintext" />
+    <Scenarios Include="-n StaticFiles --path plaintext" />
     <Scenarios Include="-n Plaintext -r Desktop" />
     <Scenarios Include="-n Plaintext --webHost HttpSys" />
     <Scenarios Include="-n Plaintext -f Benchmarks.PassthroughConnectionFilter" />
@@ -36,6 +34,12 @@
   <PropertyGroup>
     <BenchmarksDependsOn Condition="'$(NoBuild)' != 'true'">Compile</BenchmarksDependsOn>
   </PropertyGroup>
+
+  <!--
+    BenchmarksServer calls "build /t:noop" to install the latest SDK and runtime as quickly as possible.
+    The default target would compile benchmarks.sln which takes much longer.
+  -->
+  <Target Name="NoOp" />
 
   <Target Name="TestBenchmarks" DependsOnTargets="$(BenchmarksDependsOn)">
     <Error Text="BENCHMARK_SERVER must be set" Condition="'$(BENCHMARK_SERVER)' == ''" />
