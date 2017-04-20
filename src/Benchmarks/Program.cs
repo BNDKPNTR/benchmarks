@@ -10,7 +10,7 @@ using Benchmarks.Configuration;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.HttpSys;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
-using Microsoft.AspNetCore.Server.Kestrel.Core.Adapter;
+using Microsoft.AspNetCore.Server.Kestrel.Core.Adapter.Internal;
 using Microsoft.AspNetCore.Server.Kestrel.Core.Internal;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -55,6 +55,7 @@ namespace Benchmarks
                     .AddSingleton<Scenarios>()
                 );
 
+            bool? threadPoolDispatching = null;
             if (String.Equals(Server, "Kestrel", StringComparison.OrdinalIgnoreCase))
             {
                 webHostBuilder = webHostBuilder.UseKestrel(options =>
@@ -72,15 +73,47 @@ namespace Benchmarks
                     {
                         Listen(options, config, "http://localhost:5000/");
                     }
-                }).UseLibuv(options =>
-                {
-                    var threads = GetThreadCount(config);
 
-                    if (threads > 0)
+                    var kestrelThreadPoolDispatchingValue = config["KestrelThreadPoolDispatching"];
+                    if (kestrelThreadPoolDispatchingValue != null)
                     {
-                        options.ThreadCount = threads;
+                        // Dispatching to the thread pool means we don't want to use the transport thread
+                        options.UseTransportThread = !bool.Parse(kestrelThreadPoolDispatchingValue);
                     }
                 });
+
+                var threadCount = GetThreadCount(config);
+                var kestrelTransport = config["KestrelTransport"];
+
+                if (threadCount > 0 || threadPoolDispatching == false ||
+                    string.Equals(kestrelTransport, "Libuv", StringComparison.OrdinalIgnoreCase))
+                {
+                    webHostBuilder.UseLibuv(options =>
+                    {
+                        if (threadCount > 0)
+                        {
+                            options.ThreadCount = threadCount;
+                        }
+                        else if (threadPoolDispatching == false)
+                        {
+                            // If thread pool dispatching is explicitly set to false
+                            // and the thread count wasn't specified then use 2 * number of logical cores
+                            options.ThreadCount = Environment.ProcessorCount * 2;
+                        }
+                    });
+                }
+                else if (string.Equals(kestrelTransport, "Sockets", StringComparison.OrdinalIgnoreCase))
+                {
+                    webHostBuilder.UseSockets();
+                }
+                else if (string.IsNullOrEmpty(kestrelTransport))
+                {
+                    // Use default transport
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Unknown transport {kestrelTransport}");
+                }
 
                 webHostBuilder.UseSetting(WebHostDefaults.ServerUrlsKey, string.Empty);
             }
@@ -105,13 +138,6 @@ namespace Benchmarks
                 var sysPerfLogger = webHost.Services.GetService<ISysPerfLogger>();
                 var requestLogger = (RequestLogger)webHost.Services.GetService<RequestLoggerProvider>().CreateLogger(string.Empty);
                 StartInteractiveConsoleThread(metrics, sysPerfLogger, requestLogger);
-            }
-
-            var kestrelThreadPoolDispatchingValue = config["KestrelThreadPoolDispatching"];
-            if (kestrelThreadPoolDispatchingValue != null)
-            {
-                webHost.ServerFeatures.Get<InternalKestrelServerOptions>().ThreadPoolDispatching =
-                    bool.Parse(kestrelThreadPoolDispatchingValue);
             }
 
             webHost.Run();
@@ -199,7 +225,7 @@ namespace Benchmarks
         private static void Listen(KestrelServerOptions options, IConfigurationRoot config, string url)
         {
             var urlPrefix = UrlPrefix.Create(url);
-            var endpoint =  CreateIPEndPoint(urlPrefix);
+            var endpoint = CreateIPEndPoint(urlPrefix);
 
             options.Listen(endpoint, listenOptions =>
             {
