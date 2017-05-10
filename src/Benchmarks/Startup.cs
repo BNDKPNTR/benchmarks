@@ -149,11 +149,6 @@ namespace Benchmarks
         public void Configure(IApplicationBuilder app, ApplicationDbSeeder dbSeeder, IOptions<AppSettings> appSettings,
             ILoggerFactory loggerFactory)
         {
-            if (appSettings.Value.LogLevel.HasValue)
-            {
-                loggerFactory.AddConsole(appSettings.Value.LogLevel.Value);
-            }
-
             if (Scenarios.StaticFiles)
             {
                 app.UseStaticFiles();
@@ -169,7 +164,7 @@ namespace Benchmarks
                 app.UseJson();
             }
 
-            if (Scenarios.Copy)
+            if (Scenarios.CopyToAsync)
             {
                 app.UseCopyToAsync();
             }

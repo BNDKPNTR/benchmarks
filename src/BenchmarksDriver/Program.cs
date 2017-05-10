@@ -42,38 +42,40 @@ namespace BenchmarkDriver
             new Dictionary<Scenario, ClientJob>()
             {
                 { Scenario.Plaintext, new ClientJob() {
-                    Connections = 256, Threads = 32, Duration = 15, PipelineDepth = 16, Headers = _plaintextHeaders
+                    Connections = 256, Threads = 32, Duration = 15, ScriptName = "pipeline", PipelineDepth = 16, Headers = _plaintextHeaders
                 } },
                 { Scenario.Json, new ClientJob() {
                     Connections = 256, Threads = 32, Duration = 15, Headers = _jsonHeaders
                 } },
+                { Scenario.CopyToAsync, new ClientJob() {
+                    Connections = 256, Threads = 32, Duration = 15, ScriptName = "post", PipelineDepth = 16, Headers = _plaintextHeaders
+                } },
                 { Scenario.MvcPlaintext, new ClientJob() {
-                    Connections = 256, Threads = 32, Duration = 15, PipelineDepth = 16, Headers = _plaintextHeaders
+                    Connections = 256, Threads = 32, Duration = 15, ScriptName = "pipeline", PipelineDepth = 16, Headers = _plaintextHeaders
                 } },
                 { Scenario.MvcJson, new ClientJob() {
                     Connections = 256, Threads = 32, Duration = 15, Headers = _jsonHeaders
                 } },
                 { Scenario.MemoryCachePlaintext, new ClientJob() {
-                    Connections = 256, Threads = 32, Duration = 15, PipelineDepth = 16, Headers = _plaintextHeaders
+                    Connections = 256, Threads = 32, Duration = 15, ScriptName = "pipeline", PipelineDepth = 16, Headers = _plaintextHeaders
                 } },
                 { Scenario.MemoryCachePlaintextSetRemove, new ClientJob() {
-                    Connections = 256, Threads = 32, Duration = 15, PipelineDepth = 16, Headers = _plaintextHeaders
+                    Connections = 256, Threads = 32, Duration = 15, ScriptName = "pipeline", PipelineDepth = 16, Headers = _plaintextHeaders
                 } },
                 { Scenario.ResponseCachingPlaintextCached, new ClientJob() {
-                    Connections = 256, Threads = 32, Duration = 15, PipelineDepth = 16, Headers = _plaintextHeaders
+                    Connections = 256, Threads = 32, Duration = 15, ScriptName = "pipeline", PipelineDepth = 16, Headers = _plaintextHeaders
                 } },
                 { Scenario.ResponseCachingPlaintextResponseNoCache, new ClientJob() {
-                    Connections = 256, Threads = 32, Duration = 15, PipelineDepth = 16, Headers = _plaintextHeaders
+                    Connections = 256, Threads = 32, Duration = 15, ScriptName = "pipeline", PipelineDepth = 16, Headers = _plaintextHeaders
                 } },
                 { Scenario.ResponseCachingPlaintextRequestNoCache, new ClientJob() {
-                    Connections = 256, Threads = 32, Duration = 15, PipelineDepth = 16,
-                    Headers = _plaintextHeaders.Append("Cache-Control: no-cache")
+                    Connections = 256, Threads = 32, Duration = 15, ScriptName = "pipeline", PipelineDepth = 16, Headers = _plaintextHeaders.Append("Cache-Control: no-cache")
                 } },
                 { Scenario.ResponseCachingPlaintextVaryByCached, new ClientJob() {
-                    Connections = 256, Threads = 32, Duration = 15, PipelineDepth = 16, Headers = _plaintextHeaders
+                    Connections = 256, Threads = 32, Duration = 15, ScriptName = "pipeline", PipelineDepth = 16, Headers = _plaintextHeaders
                 } },
                 { Scenario.StaticFiles, new ClientJob {
-                    Connections = 256, Threads = 32, Duration = 15, PipelineDepth = 16, Headers = _plaintextHeaders
+                    Connections = 256, Threads = 32, Duration = 15, ScriptName = "pipeline", PipelineDepth = 16, Headers = _plaintextHeaders
                 } },
             };
 
@@ -101,9 +103,6 @@ namespace BenchmarkDriver
             // ServerJob Options
             var connectionFilterOption = app.Option("-f|--connectionFilter",
                 "Assembly-qualified name of the ConnectionFilter", CommandOptionType.SingleValue);
-            var frameworkOption = app.Option("-r|--framework",
-                "Framework (Core or Desktop). Default is Core.",
-                CommandOptionType.SingleValue);
             var kestrelThreadCountOption = app.Option("--kestrelThreadCount",
                 "Maps to KestrelServerOptions.ThreadCount.",
                 CommandOptionType.SingleValue);
@@ -160,12 +159,6 @@ namespace BenchmarkDriver
                     webHostValue = "Kestrel";
                 }
 
-                var frameworkValue = frameworkOption.Value();
-                if (string.IsNullOrEmpty(frameworkValue))
-                {
-                    frameworkValue = "Core";
-                }
-
                 var server = serverOption.Value();
                 var client = clientOption.Value();
                 var sqlConnectionString = sqlConnectionStringOption.Value();
@@ -173,7 +166,6 @@ namespace BenchmarkDriver
                 if (!Enum.TryParse(schemeValue, ignoreCase: true, result: out Scheme scheme) ||
                     !Enum.TryParse(scenarioOption.Value(), ignoreCase: true, result: out Scenario scenario) ||
                     !Enum.TryParse(webHostValue, ignoreCase: true, result: out WebHost webHost) ||
-                    !Enum.TryParse(frameworkValue, ignoreCase: true, result: out Framework framework) ||
                     string.IsNullOrWhiteSpace(server) ||
                     string.IsNullOrWhiteSpace(client))
                 {
@@ -221,8 +213,7 @@ namespace BenchmarkDriver
                 {
                     Scheme = scheme,
                     Scenario = scenario,
-                    WebHost = webHost,
-                    Framework = framework,
+                    WebHost = webHost
                 };
 
                 if (connectionFilterOption.HasValue())
@@ -372,7 +363,6 @@ namespace BenchmarkDriver
                     await WriteResultsToSql(
                         connectionString: sqlConnectionString,
                         scenario: scenario,
-                        framework: serverJob.Framework,
                         scheme: serverJob.Scheme,
                         sources: serverJob.Sources,
                         connectionFilter: serverJob.ConnectionFilter,
@@ -489,7 +479,6 @@ namespace BenchmarkDriver
         private static async Task WriteResultsToSql(
             string connectionString,
             Scenario scenario,
-            Framework framework,
             Scheme scheme,
             IEnumerable<Source> sources,
             string connectionFilter,
@@ -592,7 +581,7 @@ namespace BenchmarkDriver
                     var p = command.Parameters;
                     p.AddWithValue("@DateTime", DateTimeOffset.UtcNow);
                     p.AddWithValue("@Scenario", scenario.ToString());
-                    p.AddWithValue("@Framework", framework.ToString());
+                    p.AddWithValue("@Framework", "Core");
                     p.AddWithValue("@Scheme", scheme.ToString().ToLowerInvariant());
                     p.AddWithValue("@Sources", sources.Any() ? (object)ConvertToSqlString(sources) : DBNull.Value);
                     p.AddWithValue("@ConnectionFilter",

@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using Benchmarks.Configuration;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Internal;
 using Newtonsoft.Json;
 using System.Diagnostics;
 using Benchmarks.Metrics;
@@ -49,7 +48,7 @@ namespace Benchmarks.Middleware
                 sw.Stop();
                 _metrics.Add(sw.Elapsed, DateTime.UtcNow);
 
-                return TaskCache.CompletedTask;
+                return Task.CompletedTask;
             }
 
             return _next(httpContext);
