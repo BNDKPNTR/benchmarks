@@ -17,6 +17,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using Benchmarks.Metrics;
 
 namespace Benchmarks
 {
@@ -48,6 +49,8 @@ namespace Benchmarks
             // We re-register the Scenarios as an instance singleton here to avoid it being created again due to the
             // registration done in Program.Main
             services.AddSingleton(Scenarios);
+
+            services.AddMetrics(Scenarios);
 
             // Common DB services
             services.AddSingleton<IRandom, DefaultRandom>();
